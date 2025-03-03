@@ -22,6 +22,17 @@ pool.connect((err) => {
   else console.log('Connected to PostgreSQL');
 });
 
+// Middleware to verify JWT
+const authenticateToken = (req, res, next) => {
+  const token = req.headers['authorization']?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'No token provided' });
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Invalid token' });
+    req.user = user;
+    next();
+  });
+};
+
 // Signup endpoint
 app.post('/signup', async (req, res) => {
   const { email, password } = req.body;
@@ -63,6 +74,32 @@ app.post('/login', async (req, res) => {
     res.json({ token });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Save weight log
+app.post('/weights', authenticateToken, async (req, res) => {
+  const { date, am_weight, pm_weight, note } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO weight_logs (user_id, date, am_weight, pm_weight, note) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [req.user.id, date, am_weight || null, pm_weight || null, note || '']
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Weight save error:', error);
+    res.status(500).json({ error: 'Failed to save weight' });
+  }
+});
+
+// Get weight logs
+app.get('/weights', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM weight_logs WHERE user_id = $1 ORDER BY date DESC', [req.user.id]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Weight fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch weights' });
   }
 });
 
