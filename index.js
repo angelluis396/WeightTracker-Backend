@@ -103,5 +103,87 @@ app.get('/weights', authenticateToken, async (req, res) => {
   }
 });
 
+// Calculate averages
+app.get('/averages', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const today = new Date().toISOString().split('T')[0];
+
+    // Helper: Get daily averages (simplified)
+    const getDailyAverageQuery = `
+      SELECT 
+        date,
+        CASE 
+          WHEN am_weight IS NOT NULL AND pm_weight IS NOT NULL THEN (am_weight + pm_weight) / 2
+          WHEN am_weight IS NOT NULL THEN am_weight
+          WHEN pm_weight IS NOT NULL THEN pm_weight
+          ELSE NULL
+        END as daily_avg
+      FROM weight_logs
+      WHERE user_id = $1 AND date <= $2
+      ORDER BY date DESC
+    `;
+
+    // Fetch daily averages
+    const dailyResults = await pool.query(getDailyAverageQuery, [userId, today]);
+    const dailyAverages = dailyResults.rows.filter(row => row.daily_avg !== null);
+
+    // Debug: Log raw daily averages
+    console.log('Daily Averages:', dailyAverages);
+
+    // 1-Day Average (today)
+    const todayEntry = dailyAverages.find(row => row.date === today);
+    const oneDayAvg = todayEntry ? parseFloat(todayEntry.daily_avg.toFixed(2)) : null;
+
+    // 2-to-6 Day Averages
+    const multiDayAverages = {};
+    for (let days = 2; days <= 6; days++) {
+      const recentDays = dailyAverages.slice(0, days);
+      if (recentDays.length === days) {
+        const dailyValues = recentDays.map(row => parseFloat(row.daily_avg));
+        console.log(`Calculating ${days}-day average. Values:`, dailyValues);
+        const sum = dailyValues.reduce((acc, val) => acc + val, 0);
+        console.log(`${days}-day sum:`, sum);
+        const avg = sum / days;
+        multiDayAverages[`${days}DayAvg`] = parseFloat(avg.toFixed(2));
+        console.log(`${days}-day avg:`, multiDayAverages[`${days}DayAvg`]);
+      } else {
+        multiDayAverages[`${days}DayAvg`] = null;
+      }
+    }
+
+    // 1-Week Average (7 days)
+    const oneWeek = dailyAverages.slice(0, 7);
+    const oneWeekAvg = oneWeek.length === 7 ? parseFloat((oneWeek.reduce((acc, row) => acc + parseFloat(row.daily_avg), 0) / 7).toFixed(2)) : null;
+
+    // 1-Month Average (28 days)
+    const oneMonth = dailyAverages.slice(0, 28);
+    const oneMonthAvg = oneMonth.length === 28 ? parseFloat((oneMonth.reduce((acc, row) => acc + parseFloat(row.daily_avg), 0) / 28).toFixed(2)) : null;
+
+    // 3-Month Average (90 days)
+    const threeMonths = dailyAverages.slice(0, 90);
+    const threeMonthAvg = threeMonths.length >= 90 ? parseFloat((threeMonths.reduce((acc, row) => acc + parseFloat(row.daily_avg), 0) / threeMonths.length).toFixed(2)) : null;
+
+    // 1-Year Average (365 days)
+    const oneYear = dailyAverages.slice(0, 365);
+    const oneYearAvg = oneYear.length >= 365 ? parseFloat((oneYear.reduce((acc, row) => acc + parseFloat(row.daily_avg), 0) / oneYear.length).toFixed(2)) : null;
+
+    res.json({
+      oneDayAvg,
+      twoDayAvg: multiDayAverages['2DayAvg'],
+      threeDayAvg: multiDayAverages['3DayAvg'],
+      fourDayAvg: multiDayAverages['4DayAvg'],
+      fiveDayAvg: multiDayAverages['5DayAvg'],
+      sixDayAvg: multiDayAverages['6DayAvg'],
+      oneWeekAvg,
+      oneMonthAvg,
+      threeMonthAvg,
+      oneYearAvg,
+    });
+  } catch (error) {
+    console.error('Averages error:', error.message, error.stack);
+    res.status(500).json({ error: 'Failed to calculate averages' });
+  }
+});
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
