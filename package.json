@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
- "scripts": {
+  "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js"
-},
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/angelluis396/WeightTracker-Backend.git"
@@ -23,6 +23,7 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.10.0",
     "pg": "^8.13.3"
   },
   "devDependencies": {
